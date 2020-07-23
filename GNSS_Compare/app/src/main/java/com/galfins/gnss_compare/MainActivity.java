@@ -27,6 +27,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.GnssMeasurementsEvent;
+import android.location.GnssStatus;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
@@ -48,6 +49,7 @@ import android.view.WindowManager;
 import android.widget.TextView;
 
 import com.androidplot.util.PixelUtils;
+import com.galfins.gnss_compare.FileLoggers.GpsGnssStream;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -116,6 +118,11 @@ public class MainActivity extends AppCompatActivity {
      * Raw measurements logger
      */
     public static RawMeasurementsFileLogger rawMeasurementsLogger = new RawMeasurementsFileLogger("rawMeasurements");
+
+    /**
+     * GPS and GNSS measurement stream over socket connection
+     */
+    public static GpsGnssStream gpsGnssStream;
 
     private static Snackbar rnpFailedSnackbar = null;
 
@@ -247,6 +254,11 @@ public class MainActivity extends AppCompatActivity {
      */
     GnssMeasurementsEvent.Callback gnssCallback;
 
+    /**
+     * Status callback object assigned to GNSS status callback
+     */
+    GnssStatus.Callback gnssStatusCallback;
+
     static View mainView;
 
     private static Location locationFromGoogleServices = null;
@@ -281,6 +293,17 @@ public class MainActivity extends AppCompatActivity {
 
                 if (rawMeasurementsLogger.isStarted())
                     rawMeasurementsLogger.onGnssMeasurementsReceived(eventArgs);
+
+                if(gpsGnssStream.isStarted())
+                    gpsGnssStream.onGnssMeasurementsReceived(eventArgs);
+            }
+        };
+
+        gnssStatusCallback = new GnssStatus.Callback() {
+            @Override
+            public void onSatelliteStatusChanged(GnssStatus status) {
+                super.onSatelliteStatusChanged(status);
+                gpsGnssStream.OnGnssStatusUpdate(status);
             }
         };
 
@@ -307,6 +330,8 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
 
+                    gpsGnssStream.updateFineLocation(lastLocation);
+
                     Log.i(TAG, "locationFromGoogleServices: New location (phone): "
                             + lastLocation.getLatitude() + ", "
                             + lastLocation.getLongitude() + ", "
@@ -327,6 +352,8 @@ public class MainActivity extends AppCompatActivity {
             mLocationManager.registerGnssMeasurementsCallback(
                     gnssCallback);
 
+            mLocationManager.registerGnssStatusCallback(
+                    gnssStatusCallback);
 
         }
     }
@@ -366,7 +393,7 @@ public class MainActivity extends AppCompatActivity {
         mainView = findViewById(R.id.main_view);
 
         showInitializationDisclamer();
-
+        gpsGnssStream = new GpsGnssStream(this);
         startService(new Intent(this, GnssCoreService.class));
     }
 
@@ -516,7 +543,18 @@ public class MainActivity extends AppCompatActivity {
                     logButton.setTitle(R.string.start_log_button_description);
                 }
                 return true;
-
+            case R.id.action_start_stop_stream:
+                MenuItem streamButton = menu.findItem(R.id.action_start_stop_stream);
+                if (!gpsGnssStream.isStarted()) {
+                    gpsGnssStream.ConnectAndStartStreaming();
+                    makeNotification("Starting new connection and stream measurements...");
+                    streamButton.setTitle(R.string.stop_stream_button_description);
+                } else {
+                    gpsGnssStream.Disconnect();
+                    makeNotification("Stopping raw GNSS measurements log...");
+                    streamButton.setTitle(R.string.start_stream_button_description);
+                }
+                return true;
             default:
                 // If we got here, the user's action was not recognized.
                 // Invoke the superclass to handle it.

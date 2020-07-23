@@ -14,4 +14,8 @@
     <item android:id="@+id/action_start_stop_log"
         android:title="@string/start_log_button_description"
         app:showAsAction="never"/>
+
+    <item android:id="@+id/action_start_stop_stream"
+        android:title="@string/start_stream_button_description"
+        app:showAsAction="never"/>
 </menu>
